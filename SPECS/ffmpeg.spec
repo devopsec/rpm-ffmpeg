@@ -1,18 +1,12 @@
-# TODO: add make test to %%check section
-
-# dev build
-#global branch  oldabi-
-#global date    20220104
-#global commit  311ea9c529117fb8e38abd6ca7e81782b6b21257
-#global rel ${date}git$(c=${commit}; echo ${c:0:7})
-
-# release build
-%{?!ver: %global ver 5.1.2}
-%{?!rel: %global rel 1}
+%if 0%{?fedora} >= 37 || 0%{?rhel} >= 9
+%bcond_without libavcodec_freeworld
+%else
+%bcond_with libavcodec_freeworld
+%endif
 
 %undefine _package_note_file
 
-%ifarch %{ix86}
+%ifarch %{ix86} %{arm}
 # Fails due to asm issue
 %global _lto_cflags %{nil}
 %endif
@@ -22,57 +16,43 @@
 
 # Disable because of gcc issue
 %global _without_lensfun  1
+# Disable due to undefined symbols in libavformat
+#global _with_dvddemuxer 1
 %ifnarch i686
 %global _with_bs2b        1
+%global _with_codec2      1
 %global _with_chromaprint 1
 %global _with_ilbc        1
+%global _with_openh264    1
 %if 0%{?fedora}
-%global _with_rav1e       1
-%else
-%global _without_vulkan   1
-%global _without_frei0r   1
-%global _without_lv2      1
+%global _with_placebo     1
 %endif
-%global _with_rubberband  1
+%global _with_rav1e       1
 %global _with_smb         1
 %global _with_snappy      1
+%global _with_svtav1      1
 %global _with_tesseract   1
 %global _with_twolame     1
 %global _with_wavpack     1
 %global _with_webp        1
 %global _with_zmq         1
 %else
-%global _without_rtmp     1
+%global _without_libklvanc 1
+%global _without_libaribb24 1
+%global _without_libaribcaption 1
+%global _without_rubberband  1
 %global _without_vulkan   1
 %endif
 %ifarch x86_64
-%global _with_mfx         1
-%if 0%{?fedora}
-%global _with_svtav1      1
-%endif
+%global _with_vpl         1
 %global _with_vapoursynth 1
 %global _with_vmaf        1
 %endif
 
 # flavor nonfree
 %if 0%{?_with_cuda:1}
-%global debug_package %{nil}
-%global flavor           -cuda
-%global progs_suffix     -cuda
-#global build_suffix     -lgpl
-%ifarch %{cuda_arches}
 %global _with_cuvid      1
 %global _with_libnpp     1
-%endif
-%global _with_fdk_aac    1
-%global _without_cdio    1
-%global _without_frei0r  1
-%global _without_gpl     1
-%global _without_vidstab 1
-%global _without_x264    1
-%global _without_x265    1
-%global _without_xvid    1
-%undefine _with_smb
 %endif
 
 # Disable nvenc when not relevant
@@ -82,7 +62,7 @@
 
 # extras flags
 %if 0%{!?_cuda_version:1}
-%global _cuda_version 11.2
+%global _cuda_version 12.6
 %endif
 %global _cuda_version_rpm %(echo %{_cuda_version} | sed -e 's/\\./-/')
 %global _cuda_bindir %{_cuda_prefix}/bin
@@ -113,26 +93,26 @@ ExclusiveArch: armv7hnl
 %global ffmpeg_license %{?lesser}GPLv2+
 %endif
 
-Summary:        A complete, cross-platform solution to record, convert and stream audio and video
+Summary:        Digital VCR and streaming server
 Name:           ffmpeg%{?flavor}
 Version:        %{ver}
 Release:        %{rel}%{?dist}
 License:        %{ffmpeg_license}
-URL:            http://ffmpeg.org/
-%if 0%{?date}
-Source0:        ffmpeg-%{?branch}%{date}.tar.xz
-%else
-Source0:        http://ffmpeg.org/releases/ffmpeg-%{version}.tar.xz
-%endif
-Patch0:         dash-live.patch
+URL:            https://ffmpeg.org/
+Source0:        ffmpeg-%{ver}.tar.xz
+Source1:        ffmpeg-%{ver}.tar.xz.asc
+Source2:        ffmpeg-devel.asc
+Patch0:         fix_librsvgdec_compilation.patch
 Conflicts:      %{name}-free
-Requires:       %{name}-libs%{?_isa} = %{version}-%{release}
+Provides:       %{name}-bin = %{ver}-%{release}
+Requires:       %{name}-libs%{?_isa} = %{ver}-%{release}
 %{?_with_cuda:BuildRequires: cuda-minimal-build-%{_cuda_version_rpm} cuda-drivers-devel}
 %{?_with_cuda:%{?!_with_cuda_nvcc:BuildRequires: clang}}
 %{?_with_libnpp:BuildRequires: pkgconfig(nppc-%{_cuda_version})}
 BuildRequires:  alsa-lib-devel
 BuildRequires:  AMF-devel
 BuildRequires:  bzip2-devel
+%{?_with_codec2:BuildRequires: codec2-devel}
 %{?_with_faac:BuildRequires: faac-devel}
 %{?_with_fdk_aac:BuildRequires: fdk-aac-devel}
 %{?_with_flite:BuildRequires: flite-devel}
@@ -141,35 +121,49 @@ BuildRequires:  freetype-devel
 BuildRequires:  fribidi-devel
 %{!?_without_frei0r:BuildRequires: frei0r-devel}
 %{?_with_gme:BuildRequires: game-music-emu-devel}
+BuildRequires:  gnupg2
 BuildRequires:  gnutls-devel
 BuildRequires:  gsm-devel
+BuildRequires:  harfbuzz-devel
 %{?_with_ilbc:BuildRequires: ilbc-devel}
 BuildRequires:  lame-devel >= 3.98.3
 %{!?_without_jack:BuildRequires: jack-audio-connection-kit-devel}
+%{!?_without_jxl:BuildRequires: libjxl-devel}
 %{!?_without_ladspa:BuildRequires: ladspa-devel}
+BuildRequires:  lcms2-devel
 %{!?_without_aom:BuildRequires:  libaom-devel}
-%{!?_without_dav1d:BuildRequires:  libdav1d-devel >= 0.2.1}
+%{!?_without_aribb24:BuildRequires: pkgconfig(aribb24) >= 1.0.3}
+%{!?_without_dav1d:BuildRequires:  libdav1d-devel}
+%{?_with_dvddemuxer:BuildRequires:  libdvdnav-devel libdvdread-devel}
 %{!?_without_ass:BuildRequires:  libass-devel}
 %{!?_without_bluray:BuildRequires:  libbluray-devel}
 %{?_with_bs2b:BuildRequires: libbs2b-devel}
 %{?_with_caca:BuildRequires: libcaca-devel}
 %{!?_without_cdio:BuildRequires: libcdio-paranoia-devel}
 %{?_with_chromaprint:BuildRequires: libchromaprint-devel}
-%{?_with_crystalhd:BuildRequires: libcrystalhd-devel}
 %{!?_without_lensfun:BuildRequires: lensfun-devel}
 %if 0%{?_with_ieee1394}
 BuildRequires:  libavc1394-devel
 BuildRequires:  libdc1394-devel
 BuildRequires:  libiec61883-devel
 %endif
+%{!?_without_libaribcaption:BuildRequires: pkgconfig(libaribcaption) >= 1.1.1}
 BuildRequires:  libdrm-devel
 BuildRequires:  libgcrypt-devel
+%{!?_without_libklvanc:BuildRequires: libklvanc-devel}
 BuildRequires:  libGL-devel
 BuildRequires:  libmodplug-devel
 BuildRequires:  libmysofa-devel
+%if 0%{?fedora} && 0%{?fedora} > 39
+%{?_with_openh264:BuildRequires: noopenh264-devel}
+%else
+%{?_with_openh264:BuildRequires: openh264-devel}
+%endif
 BuildRequires:  libopenmpt-devel
+%{?_with_placebo:BuildRequires: libplacebo-devel >= 4.192.0}
 BuildRequires:  librsvg2-devel
-%{!?_without_rtmp:BuildRequires: librtmp-devel}
+# Disable rtmp because of rfbz: 6441 & 2399
+%{?_with_rtmp:BuildRequires: librtmp-devel}
 %{?_with_smb:BuildRequires: libsmbclient-devel}
 BuildRequires:  libssh-devel
 BuildRequires:  libtheora-devel
@@ -202,8 +196,9 @@ BuildRequires:  openjpeg2-devel
 %{!?_without_opus:BuildRequires: opus-devel >= 1.1.3}
 %{!?_without_pulse:BuildRequires: pulseaudio-libs-devel}
 BuildRequires:  perl(Pod::Man)
+BuildRequires:  qrencode-devel
 %{?_with_rav1e:BuildRequires: pkgconfig(rav1e)}
-%{?_with_rubberband:BuildRequires: rubberband-devel}
+%{!?_without_rubberband:BuildRequires: rubberband-devel}
 %{!?_without_tools:BuildRequires: SDL2-devel}
 %{?_with_snappy:BuildRequires: snappy-devel}
 BuildRequires:  soxr-devel
@@ -215,9 +210,10 @@ BuildRequires:  pkgconfig(srt)
 BuildRequires:  texinfo
 %{?_with_twolame:BuildRequires: twolame-devel}
 %{?_with_vmaf:BuildRequires: libvmaf-devel >= 1.5.2}
+%{?_with_vpl:BuildRequires: pkgconfig(vpl) >= 2.6}
 %{?_with_wavpack:BuildRequires: wavpack-devel}
 %{!?_without_vidstab:BuildRequires:  vid.stab-devel}
-%{!?_without_vulkan:BuildRequires:  vulkan-loader-devel pkgconfig(shaderc)}
+%{!?_without_vulkan:BuildRequires: pkgconfig(shaderc) pkgconfig(vulkan) >= 1.3.277}
 %{!?_without_x264:BuildRequires: x264-devel >= 0.0.0-0.31}
 %{!?_without_x265:BuildRequires: x265-devel}
 %{!?_without_xvid:BuildRequires: xvidcore-devel}
@@ -234,7 +230,6 @@ and video, MPEG4, h263, ac3, asf, avi, real, mjpeg, and flash.
 
 %package        libs
 Summary:        Libraries for %{name}
-%if 0%{?rhel}
 Conflicts:      libavcodec-free
 Conflicts:      libavfilter-free
 Conflicts:      libavformat-free
@@ -242,8 +237,8 @@ Conflicts:      libavutil-free
 Conflicts:      libpostproc-free
 Conflicts:      libswresample-free
 Conflicts:      libswscale-free
-%endif
 %{?_with_vmaf:Recommends:     vmaf-models}
+Provides: libavcodec-freeworld = %{ver}-%{release}
 
 %description    libs
 FFmpeg is a complete and free Internet live audio and video
@@ -254,10 +249,8 @@ This package contains the libraries for %{name}
 
 %package     -n libavdevice%{?flavor}
 Summary:        Special devices muxing/demuxing library
-%if 0%{?rhel}
 Conflicts:      libavdevice-free
-%endif
-Requires:       %{name}-libs%{_isa} = %{version}-%{release}
+Requires:       %{name}-libs%{_isa} = %{ver}-%{release}
 
 %description -n libavdevice%{?flavor}
 Libavdevice is a complementary library to libavf "libavformat". It provides
@@ -267,8 +260,8 @@ devices, audio capture and playback etc.
 %package        devel
 Summary:        Development package for %{name}
 Conflicts:      %{name}-free-devel
-Requires:       %{name}-libs%{_isa} = %{version}-%{release}
-Requires:       libavdevice%{?flavor}%{_isa} = %{version}-%{release}
+Requires:       %{name}-libs%{_isa} = %{ver}-%{release}
+Requires:       libavdevice%{?flavor}%{_isa} = %{ver}-%{release}
 Requires:       pkgconfig
 
 %description    devel
@@ -278,6 +271,18 @@ VCR. It can encode in real time in many formats including MPEG1 audio
 and video, MPEG4, h263, ac3, asf, avi, real, mjpeg, and flash.
 This package contains development files for %{name}
 
+%if %{with libavcodec_freeworld}
+%package -n     libavcodec-freeworld
+Summary:        Freeworld libavcodec to complement the distro counterparts
+# Supplements doesn't work well yet - we can rely on comps for now
+#Supplements:    libavcodec-free >= %%{ver}
+Conflicts: libavcodec-free < %{ver}
+
+%description -n libavcodec-freeworld
+Freeworld libavcodec to complement the distro counterparts
+%endif
+
+
 # Don't use the %%configure macro as this is not an autotool script
 %global ff_configure \
 ./configure \\\
@@ -286,6 +291,7 @@ This package contains development files for %{name}
     --datadir=%{_datadir}/%{name} \\\
     --docdir=%{_docdir}/%{name} \\\
     --incdir=%{_includedir}/%{name} \\\
+    --libdir=%{_libdir} \\\
     --mandir=%{_mandir} \\\
     --arch=%{_target_cpu} \\\
     --optflags="%{optflags}" \\\
@@ -297,32 +303,38 @@ This package contains development files for %{name}
     %{!?_without_amr:--enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libvo-amrwbenc --enable-version3} \\\
     --enable-bzlib \\\
     %{?_with_chromaprint:--enable-chromaprint} \\\
-    %{!?_with_crystalhd:--disable-crystalhd} \\\
     --enable-fontconfig \\\
     %{!?_without_frei0r:--enable-frei0r} \\\
     --enable-gcrypt \\\
     %{?_with_gmp:--enable-gmp --enable-version3} \\\
     --enable-gnutls \\\
     %{!?_without_ladspa:--enable-ladspa} \\\
+    --enable-lcms2 \\\
     %{!?_without_aom:--enable-libaom} \\\
+    %{!?_without_libaribb24:--enable-libaribb24} \\\
+    %{!?_without_libaribcaption:--enable-libaribcaption} \\\
     %{!?_without_dav1d:--enable-libdav1d} \\\
     %{!?_without_ass:--enable-libass} \\\
     %{!?_without_bluray:--enable-libbluray} \\\
     %{?_with_bs2b:--enable-libbs2b} \\\
     %{?_with_caca:--enable-libcaca} \\\
+    %{?_with_codec2:--enable-libcodec2} \\\
     %{?_with_cuda_nvcc:--enable-cuda-nvcc --enable-nonfree} \\\
     %{?_with_cuvid:--enable-cuvid --enable-nonfree} \\\
     %{!?_without_cdio:--enable-libcdio} \\\
     %{?_with_ieee1394:--enable-libdc1394 --enable-libiec61883} \\\
     --enable-libdrm \\\
+    %{?_with_dvddemuxer:--enable-libdvdnav --enable-libdvdread} \\\
     %{?_with_faac:--enable-libfaac --enable-nonfree} \\\
     %{?_with_fdk_aac:--enable-libfdk-aac --enable-nonfree} \\\
     %{?_with_flite:--enable-libflite} \\\
     %{!?_without_jack:--enable-libjack} \\\
+    %{!?_without_jxl:--enable-libjxl} \\\
     --enable-libfreetype \\\
     %{!?_without_fribidi:--enable-libfribidi} \\\
     %{?_with_gme:--enable-libgme} \\\
     --enable-libgsm \\\
+    --enable-libharfbuzz \\\
     %{?_with_ilbc:--enable-libilbc} \\\
     %{!?_without_lensfun:--enable-liblensfun} \\\
     %{?_with_libnpp:--enable-libnpp --enable-nonfree} \\\
@@ -337,14 +349,17 @@ This package contains development files for %{name}
     %{!?_without_opencl:--enable-opencl} \\\
     %{?_with_opencv:--enable-libopencv} \\\
     %{!?_without_opengl:--enable-opengl} \\\
+    %{?_with_openh264:--enable-libopenh264} \\\
     --enable-libopenjpeg \\\
     --enable-libopenmpt \\\
     %{!?_without_opus:--enable-libopus} \\\
     %{!?_without_pulse:--enable-libpulse} \\\
+    %{?_with_placebo:--enable-libplacebo} \\\
     --enable-librsvg \\\
     %{?_with_rav1e:--enable-librav1e} \\\
-    %{!?_without_rtmp:--enable-librtmp} \\\
-    %{?_with_rubberband:--enable-librubberband} \\\
+    %{?_with_rtmp:--enable-librtmp} \\\
+    %{!?_without_rubberband:--enable-librubberband} \\\
+    --enable-libqrencode \\\
     %{?_with_smb:--enable-libsmbclient --enable-version3} \\\
     %{?_with_snappy:--enable-libsnappy} \\\
     --enable-libsoxr \\\
@@ -383,12 +398,8 @@ This package contains development files for %{name}
 
 
 %prep
-%if 0%{?date}
-%autosetup -p1 -n ffmpeg-%{?branch}%{date}
-echo "git-snapshot-%{?branch}%{date}-rpmfusion" > VERSION
-%else
-%autosetup -p1 -n ffmpeg-%{version}
-%endif
+%{gpgverify} --keyring='%{SOURCE2}' --signature='%{SOURCE1}' --data='%{SOURCE0}'
+%autosetup -p1 -n ffmpeg-%{ver}
 # fix -O3 -g in host_cflags
 sed -i "s|check_host_cflags -O3|check_host_cflags %{optflags}|" configure
 mkdir -p _doc/examples
@@ -397,13 +408,7 @@ cp -pr doc/examples/{*.c,Makefile,README} _doc/examples/
 %build
 %{?_with_cuda:export PATH=${PATH}:%{_cuda_bindir}}
 %{ff_configure}\
-%if 0%{?fedora}
-    --libdir=%{_libdir}/%{name} \
-    --shlibdir=%{_libdir}/%{name} \
-%else
-    --libdir=%{_libdir} \
     --shlibdir=%{_libdir} \
-%endif
 %if 0%{?_without_tools:1}
     --disable-doc \
     --disable-ffmpeg --disable-ffplay --disable-ffprobe \
@@ -415,6 +420,7 @@ cp -pr doc/examples/{*.c,Makefile,README} _doc/examples/
     --cpu=%{_target_cpu} \
 %endif
     %{?_with_mfx:--enable-libmfx} \
+    %{?_with_vpl:--enable-libvpl} \
 %ifarch %{ix86} x86_64 %{power64}
     --enable-runtime-cpudetect \
 %endif
@@ -462,10 +468,13 @@ rm -r %{buildroot}%{_datadir}/%{name}/examples
 install -pm755 tools/qt-faststart %{buildroot}%{_bindir}
 %endif
 
-%if 0%{?fedora}
-install -m 0755 -d  %{buildroot}%{_sysconfdir}/ld.so.conf.d/
+%if %{with libavcodec_freeworld}
+# Install the libavcodec freeworld counterpart
+mkdir -p %{buildroot}%{_sysconfdir}/ld.so.conf.d/
+mkdir -p %{buildroot}%{_libdir}/%{name}
 echo -e "%{_libdir}/%{name}\n" > %{buildroot}%{_sysconfdir}/ld.so.conf.d/%{name}-%{_lib}.conf
-mv %{buildroot}%{_libdir}{/%{name},}/pkgconfig
+cp -pa %{buildroot}%{_libdir}/libavcodec.so.* \
+ %{buildroot}%{_libdir}/%{name}
 %endif
 
 %ldconfig_scriptlets  libs
@@ -488,24 +497,14 @@ mv %{buildroot}%{_libdir}{/%{name},}/pkgconfig
 %files libs
 %doc  CREDITS README.md
 %license COPYING.*
-%if 0%{?fedora}
-%{_sysconfdir}/ld.so.conf.d/%{name}-%{_lib}.conf
-%{_libdir}/%{name}/lib*.so.*
-%exclude %{_libdir}/%{name}/libavdevice%{?build_suffix}.so.*
-%else
 %{_libdir}/lib*.so.*
 %exclude %{_libdir}/libavdevice%{?build_suffix}.so.*
-%endif
 %{!?flavor:%{_mandir}/man3/lib*.3.*
 %exclude %{_mandir}/man3/libavdevice.3*
 }
 
 %files -n libavdevice%{?flavor}
-%if 0%{?fedora}
-%{_libdir}/%{name}/libavdevice%{?build_suffix}.so.*
-%else
 %{_libdir}/libavdevice%{?build_suffix}.so.*
-%endif
 %{!?flavor:%{_mandir}/man3/libavdevice.3*}
 
 %files devel
@@ -514,14 +513,156 @@ mv %{buildroot}%{_libdir}{/%{name},}/pkgconfig
 %doc %{_docdir}/%{name}/*.{css,html}
 %{_includedir}/%{name}
 %{_libdir}/pkgconfig/lib*.pc
-%%if 0%{?fedora}
-%{_libdir}/%{name}/lib*.so
-%else
 %{_libdir}/lib*.so
+
+%if %{with libavcodec_freeworld}
+%files -n libavcodec-freeworld
+%{_sysconfdir}/ld.so.conf.d/%{name}-%{_lib}.conf
+%{_libdir}/%{name}/libavcodec.so.*
 %endif
 
 
 %changelog
+* Sun Nov 17 2024 Dominik Mierzejewski <dominik@greysector.net> - 7.0.2-5
+- Rebuild for tesseract-5.5
+
+* Wed Oct 09 2024 Leigh Scott <leigh123linux@gmail.com> - 7.0.2-4
+- Disable DVD demuxer due to undefined symbols in libavformat
+
+* Mon Oct 07 2024 Nicolas Chauvet <kwizart@gmail.com> - 7.0.2-3
+- Sync with fedora deps:
+  Enable Kernel Labs VANC processing and ARIB text/caption decoding
+
+* Fri Sep 20 2024 Leigh Scott <leigh123linux@gmail.com> - 7.0.2-2
+- Rebuild
+
+* Sun Aug 04 2024 Leigh Scott <leigh123linux@gmail.com> - 7.0.2-1
+- Update to 7.0.2
+
+* Thu Aug 01 2024 RPM Fusion Release Engineering <sergiomb@rpmfusion.org> - 7.0.1-3
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_41_Mass_Rebuild
+
+* Fri May 31 2024 Robert-André Mauchin <zebob.m@gmail.com> - 7.0.1-2
+- Rebuild for svt-av1 2.1.0
+
+* Sun May 26 2024 Leigh Scott <leigh123linux@gmail.com> - 7.0.1-1
+- Update to 7.0.1
+
+* Fri Apr 19 2024 Leigh Scott <leigh123linux@gmail.com> - 7.0-1
+- Update to 7.0
+
+* Sat Apr 06 2024 Leigh Scott <leigh123linux@gmail.com> - 6.1.1-8
+- Rebuild for new x265 version
+
+* Fri Mar 22 2024 Sérgio Basto <sergio@serjux.com> - 6.1.1-7
+- Rebuild for jpegxl (libjxl) 0.10.2
+
+* Tue Mar 12 2024 Dominik Mierzejewski <dominik@greysector.net> - 6.1.1-6
+- Enable drawtext filter (requires libharfbuzz, rfbz#6889)
+
+* Thu Feb 01 2024 Leigh Scott <leigh123linux@gmail.com> - 6.1.1-5
+- rebuilt
+
+* Thu Feb 01 2024 Leigh Scott <leigh123linux@gmail.com> - 6.1.1-4
+- Switch to noopenh264-devel for f39+
+
+* Tue Jan 16 2024 Nicolas Chauvet <kwizart@gmail.com> - 6.1.1-3
+- Rebuilt for libavcodec-freeworld
+
+* Sun Jan 14 2024 Leigh Scott <leigh123linux@gmail.com> - 6.1.1-2
+- rebuilt
+
+* Mon Jan 01 2024 Leigh Scott <leigh123linux@gmail.com> - 6.1.1-1
+- Update to 6.1.1 release
+
+* Wed Nov 15 2023 Nicolas Chauvet <kwizart@gmail.com> - 6.1-3
+- Bump
+
+* Wed Nov 15 2023 Leigh Scott <leigh123linux@gmail.com> - 6.1-2
+- Add patch to fix fedora ffmpeg brokenABI change
+
+* Sat Nov 11 2023 Leigh Scott <leigh123linux@gmail.com> - 6.1-1
+- Update to 6.1 release
+
+* Fri Nov 10 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0.1-1
+- Update to 6.0.1 release
+
+* Sun Oct 08 2023 Dominik Mierzejewski <dominik@greysector.net> - 6.0-18
+- Backport upstream patch to fix segfault when passing non-existent filter
+  option (rfbz#6773)
+
+* Fri Sep 29 2023 Nicolas Chauvet <nchauvet@linagora.com> - 6.0-17
+- Rebuild for libplacebo
+- Backport upstream patch to fix assembly with binutils 2.41 - rathann
+
+* Fri Jul 28 2023 Nicolas Chauvet <kwizart@gmail.com> - 6.0-16
+- rebuilt
+
+* Sun Jul 16 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-15
+- rebuilt
+
+* Fri Jun 23 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-14
+- rebuilt
+
+* Fri Jun 23 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-13
+- rebuilt
+
+* Wed Jun 14 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-12
+- rebuilt
+
+* Sun May 14 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-11
+- fedora cisco repo isn't multiarch
+
+* Fri May 12 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-10
+- Enable openh264 for fedora
+
+* Mon Apr 24 2023 Nicolas Chauvet <kwizart@gmail.com> - 6.0-9
+- Add ffmpeg-bin for deps
+
+* Fri Apr 07 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-8
+- rebuilt
+
+* Fri Mar 24 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-7
+- rebuilt
+
+* Wed Mar 22 2023 Nicolas Chauvet <kwizart@gmail.com> - 6.0-6
+- Rebuilt
+
+* Sat Mar 18 2023 Todd Zullinger <tmz@pobox.com> - 6.0-5
+- verify upstream source signature
+
+* Sun Mar 12 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-4
+- Rebuild against new nvcodec-headers
+
+* Sun Mar 12 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-3
+- Enable chromaprint
+- Enable svt-av1 on all arches
+
+* Tue Feb 28 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-2
+- Disable chromaprint
+
+* Tue Feb 21 2023 Leigh Scott <leigh123linux@gmail.com> - 6.0-1
+- Update to 6.0 release
+
+* Sun Jan 08 2023 Leigh Scott <leigh123linux@gmail.com> - 5.1.2-9
+- Enable libplacebo (rfbz#6549)
+
+* Fri Dec 23 2022 Nicolas Chauvet <kwizart@gmail.com> - 5.1.2-8
+- rebuild
+
+* Mon Nov 21 2022 Nicolas Chauvet <kwizart@gmail.com> - 5.1.2-6
+- Enable libjxl
+- Enable svt-av1 on el9 x86_64
+
+* Thu Nov 17 2022 Nicolas Chauvet <kwizart@gmail.com> - 5.1.2-5
+- Rework el9 cases
+
+* Mon Oct 17 2022 Leigh Scott <leigh123linux@gmail.com> - 5.1.2-3
+- Disable rtmp because of rfbz: 6441 & 2399
+
+* Wed Sep 28 2022 Nicolas Chauvet <kwizart@gmail.com> - 5.1.2-2
+- Implement libavcodec-freeworld
+
 * Sun Sep 25 2022 Leigh Scott <leigh123linux@gmail.com> - 5.1.2-1
 - Update to 5.1.2 release
 
@@ -671,7 +812,7 @@ mv %{buildroot}%{_libdir}{/%{name},}/pkgconfig
 - Revert last commit
 
 * Sat Oct 10 2020 Leigh Scott <leigh123linux@gmail.com> - 4.3.1-10
-- Add VP9 10/12 Bit support for VDPAU 
+- Add VP9 10/12 Bit support for VDPAU
 
 * Tue Aug 18 2020 Leigh Scott <leigh123linux@gmail.com> - 4.3.1-9
 - Disable vulkan on i686
@@ -785,7 +926,7 @@ mv %{buildroot}%{_libdir}{/%{name},}/pkgconfig
 - Enable vulkan support
 
 * Sat Feb 22 2020 Leigh Scott <leigh123linux@googlemail.com> - 4.3-0.1.20200222git
-- Update to 20200222git 
+- Update to 20200222git
 
 * Tue Feb 04 2020 RPM Fusion Release Engineering <leigh123linux@gmail.com> - 4.2.2-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_32_Mass_Rebuild
